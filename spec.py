@@ -1,5 +1,7 @@
 import pandas as pd
 import glob
+import itertools
+import os
 
 
 def data_cleaning(dir):  # input as a folder
@@ -15,23 +17,73 @@ def data_cleaning(dir):  # input as a folder
 
     Author : Sunaina
     """
-    filenames = glob.glob(dir + "\*.xlsx")  #
-    dictionary = {}
-    for file in filenames:
-        df = pd.read_excel(
-            file, sheet_name=None
-        )  # making a dictionary where each key is related to the dataframe of each sheet
-        keys = list(df.keys())
-        for key in keys:
-            per_sheet = df[key]
-            output = duplicate_analysis(per_sheet)
-            dictionary[key] = output
 
-        with pd.ExcelWriter(
-            "output.xlsx", engine="xlsxwriter"
-        ) as writer:  # you can change the file path here to whatever you want
-            for sheet, df in dictionary.items():
-                df.to_excel(writer, sheet_name=sheet)
+    filenames = glob.glob(dir + "\*.xlsx")  #
+    for file in filenames:
+        try:
+            print(file)
+            output_dictionary = {}
+
+            df = pd.read_excel(
+                file, sheet_name=None
+            )  # making a dictionary where each key is related to the dataframe of each sheet
+
+            merged_df = merge_pos_neg(df) #dictionary
+            
+            merged_name = "E:/specwith5/merged/" + os.path.splitext(os.path.basename(file))[0] + "_merged.xlsx"
+
+            with pd.ExcelWriter(
+                merged_name, engine="xlsxwriter"
+            ) as writer:  # you can change the file path here to whatever you want
+                for sheet, df in merged_df.items():
+                    df.to_excel(writer, sheet_name=sheet)
+
+            sheets = list(merged_df.keys()) 
+
+            for sheet in sheets:
+                per_sheet = merged_df[sheet] #dataframe
+                output = duplicate_analysis(per_sheet) #dataframe
+                output_dictionary[sheet] = output #dictionary
+
+            new_file_name = "E:/specwith5/output/" + os.path.splitext(os.path.basename(file))[0] + "_output.xlsx"
+
+            with pd.ExcelWriter(
+                new_file_name, engine="xlsxwriter"
+            ) as writer:  # you can change the file path here to whatever you want
+                for sheet, merged_df in output_dictionary.items():
+                    merged_df.to_excel(writer, sheet_name=sheet)
+        except:
+            print("This file is giving an error ->" + str(file))
+            continue
+
+        #TO DO: add a test for comparing the sum of 'n' and the total number of metabolites
+
+
+def merge_pos_neg(dictionary):
+    """
+    Input as dictionary where each key is the sheet_name and value is the dataframe of that sheet's data.
+
+    """
+    keys = list(dictionary.keys())
+    merged_diction = {}
+    for a, b in itertools.combinations(keys, 2):
+        split_a = list(a)  # split a into ['c', '1', 'p']
+        split_b = list(b)  # split b into ['c', '1', 'n']
+        if len(split_a) == 3 & len(split_b) == 3:
+            if split_a[0] == split_b[0] and split_a[1] == split_b[1]:
+
+                merged_df = pd.concat([dictionary[a], dictionary[b]], ignore_index=True)
+                new_key = split_a[0] + split_a[1]
+                merged_diction[new_key] = merged_df
+
+        if len(split_a) == 4 & len(split_b) == 4:
+            if split_a[0] == split_b[0] and split_a[1] == split_b[1] and split_a[2] == split_b[2]:
+                
+                merged_df = pd.concat([dictionary[a], dictionary[b]], ignore_index=True)
+                new_key = split_a[0] + split_a[1] + split_a[2]
+                merged_diction[new_key] = merged_df
+
+    return merged_diction
 
 
 def duplicate_analysis(per_sheet):  # of each sheet
@@ -49,6 +101,7 @@ def duplicate_analysis(per_sheet):  # of each sheet
     df = per_sheet
 
     df = df.sort_values("Metabolite Name")
+
     # making a new column z_score where all the rows are passed through the lambda function one by one and their z-scores are calculated
     df["z_score"] = df.groupby("Metabolite Name")["Area"].apply(
         lambda x: (x - x.mean()) / x.std()
@@ -67,5 +120,5 @@ def duplicate_analysis(per_sheet):  # of each sheet
 
 
 if __name__ == "__main__":
-    dir = "C:/Users/Lenovo/Spec_data"  # add the path file here to the folder that contains all the data files
+    dir = "E:/LC-MS Data"  # add the path file here to the folder that contains all the data files
     data_cleaning(dir)
