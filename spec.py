@@ -3,49 +3,39 @@ import glob
 import itertools
 import os
 import numpy as np
-import traceback
 
 
-def data_cleaning(dir1, dir2):  # input as a folder
+def data_cleaning(dir):  # input as a folder
 
     """
-    This method runs a loop through two directories, selecting their files and then processing them through
-    merged() and duplicate_analysis().
+    This method runs a loop through all the .xlsx files in a folder, converts each sheet of the excel file to a dataframe, passes those sheets
+    through another method named duplicate_analysis which removes all the duplicates.
 
     Parameters :
-    - dir1 : directory of the folder named 'POSITIVE' containing all the positive tests
-    - dir2 : directory of the folder named 'NEGATIVE' containing all the negative tests
+    - dir : directory of the folder
 
     Returns :
-    - two excel files saved in a new folder named output and merged
+    - excel file saved in the same directory as this file but its path can be changed
 
     Author : Sunaina
     """
 
-    file_1 = glob.glob(dir1 + "\*.xlsx")  # pos
-    file_2 = glob.glob(dir2 + "\*.xlsx")  # neg
+    filenames = glob.glob(dir + "\*.xlsx")  #
 
-    filenames = []
-
-    # filenames = filenames.append(file_1) # ["POS.xlsx", "NEG.xlsx"]
-    for file1, file2 in zip(file_1, file_2):
+    for file in filenames:
         try:
-            positive = file1
-            negative = file2
-
+            print(file)
             output_dictionary = {}
 
-            df1 = pd.read_excel(
-                positive, sheet_name=None
+            df = pd.read_excel(
+                file, sheet_name=None
             )  # making a dictionary where each key is related to the dataframe of each sheet
 
-            df2 = pd.read_excel(negative, sheet_name=None)
-
-            merged_df = merge_pos_neg(df1, df2)  # dictionary
+            merged_df = merge_pos_neg(df)  # dictionary
 
             merged_name = (
                 "E:/new_data/merged/"
-                + os.path.splitext(os.path.basename(file1))[0]
+                + os.path.splitext(os.path.basename(file))[0]
                 + "_merged.xlsx"
             )
 
@@ -64,7 +54,7 @@ def data_cleaning(dir1, dir2):  # input as a folder
 
             new_file_name = (
                 "E:/new_data/output/"
-                + os.path.splitext(os.path.basename(file1))[0]
+                + os.path.splitext(os.path.basename(file))[0]
                 + "_output.xlsx"
             )
 
@@ -73,36 +63,41 @@ def data_cleaning(dir1, dir2):  # input as a folder
             ) as writer:  # you can change the file path here to whatever you want
                 for sheet, merged_df in output_dictionary.items():
                     merged_df.to_excel(writer, sheet_name=sheet)
-
         except Exception as e:
-            print("This file is giving an error ->" + str(file1) + str(file2))
-            print(traceback.format_exc())
+            print("This file is giving an error ->" + str(file))
+            print(repr(e))
             continue
 
         # TO DO: add a test for comparing the sum of 'n' and the total number of metabolites
 
 
-def merge_pos_neg(dic_1, dic_2):
+def merge_pos_neg(dictionary):
+    """
+    Input as dictionary where each key is the sheet_name and value is the dataframe of that sheet's data.
 
     """
-    Input as two dictionaries where each key is the sheet_name and value is the dataframe of that sheet's data.
-
-    """
-    keys_1 = list(dic_1.keys())  # ['SAM01', 'SAM02']
-    keys_2 = list(dic_2.keys())  # ['SAM01', 'SAM02']
-
+    keys = list(dictionary.keys())
     merged_diction = {}
+    for a, b in itertools.combinations(keys, 2):
+        split_a = list(a)  # split a into ['c', '1', 'p']
+        split_b = list(b)  # split b into ['c', '1', 'n']
+        if len(split_a) == 3 & len(split_b) == 3:
+            if split_a[0] == split_b[0] and split_a[1] == split_b[1]:
 
-    # for a, b in zip(keys_1, keys_2): # for i in [('SAM01', 'SAM02')]
+                merged_df = pd.concat([dictionary[a], dictionary[b]], ignore_index=True)
+                new_key = split_a[0] + split_a[1]
+                merged_diction[new_key] = merged_df
 
-    for i, j in zip(keys_1, keys_2):
-        if i == j:
-            merged_df = pd.concat([dic_1[i], dic_2[j]], ignore_index=True)
-            merged_diction[i] = merged_df
+        if len(split_a) == 4 & len(split_b) == 4:
+            if (
+                split_a[0] == split_b[0]
+                and split_a[1] == split_b[1]
+                and split_a[2] == split_b[2]
+            ):
 
-            # merged_df = pd.concat([dictionary[a], dictionary[b]], ignore_index=True)
-            # new_key = split_a[0] + split_a[1] + split_a[2]
-            # merged_diction[new_key] = merged_df
+                merged_df = pd.concat([dictionary[a], dictionary[b]], ignore_index=True)
+                new_key = split_a[0] + split_a[1] + split_a[2]
+                merged_diction[new_key] = merged_df
 
     return merged_diction
 
@@ -121,11 +116,11 @@ def duplicate_analysis(per_sheet):  # of each sheet
     """
     df = per_sheet
 
-    df = df.sort_values("metabolite name")
-    std_df = df.groupby("metabolite name")["Area"].agg({"std"}).reset_index()
+    df = df.sort_values("Metabolite Name")
+    std_df = df.groupby("Metabolite Name")["Area"].agg({"std"}).reset_index()
 
     # making a new column z_score where all the rows are passed through the lambda function one by one and their z-scores are calculated
-    df["z_score"] = df.groupby("metabolite name")["Area"].apply(
+    df["z_score"] = df.groupby("Metabolite Name")["Area"].apply(
         lambda x: (x - x.mean()) / x.std()
     )
 
@@ -138,22 +133,18 @@ def duplicate_analysis(per_sheet):  # of each sheet
     # their mean is taken
 
     mean_df = (
-        df.groupby("metabolite name")
+        df.groupby("Metabolite Name")
         .agg(
             Area=("Area", "mean"),
-            n=("metabolite name", "size"),
+            n=("Metabolite Name", "size"),
             z_score=("z_score", list),
         )
         .reset_index()
     )
-
     final_df = pd.concat([mean_df, std_df["std"]], axis=1)
     return final_df
 
 
-# two folders ->
-
 if __name__ == "__main__":
-    dir1 = "E:/data_/POSITIVE"  # add the path file here to the folder that contains all the data files
-    dir2 = "E:/data_/NEGATIVE"
-    data_cleaning(dir1, dir2)
+    dir = "E:/LC-MS Data"  # add the path file here to the folder that contains all the data files
+    data_cleaning(dir)
